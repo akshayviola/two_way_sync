@@ -2,11 +2,10 @@ pipeline {
     agent any
 
     environment {
-        // Define credentials IDs for Bitbucket and GitHub
-        BITBUCKET_USERNAME = 'akshaysunil201' // Define Bitbucket username directly or use a credential ID
-        BITBUCKET_APP_PASSWORD = credentials('bit_bucket_token') // Use Jenkins credentials for Bitbucket app password
-        GITHUB_USERNAME = 'akshayviola' // Define GitHub username directly or use a credential ID
-        GITHUB_TOKEN = credentials('github_token') // Use Jenkins credentials for GitHub token
+        BITBUCKET_USERNAME = 'akshaysunil201'
+        BITBUCKET_APP_PASSWORD = credentials('bit_bucket_token')
+        GITHUB_USERNAME = 'akshayviola'
+        GITHUB_TOKEN = credentials('github_token')
     }
 
     stages {
@@ -21,58 +20,51 @@ pipeline {
                     def repoName = input message: 'Enter the repository name:', parameters: [string(defaultValue: '', description: 'Repository name', name: 'REPO_NAME')]
                     def branchesInput = input message: 'Enter the branches to sync (comma-separated, e.g., main,develop):', parameters: [string(defaultValue: '', description: 'Branches to sync', name: 'BRANCHES_INPUT')]
 
-                    // Convert comma-separated branches into a list
                     def branchList = branchesInput.split(',')
 
-                    // Function to check if a GitHub repository exists
                     def checkGithubRepo = { String username, String repoToCheck ->
                         def repoCheck = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" -u \"${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}\" \"https://api.github.com/repos/${username}/${repoToCheck}\"", returnStdout: true).trim()
                         return repoCheck == '200'
                     }
 
-                    // Function to check if a Bitbucket repository exists
                     def checkBitbucketRepo = { String workspace, String repoToCheck ->
                         def response = sh(script: "curl -s -u \"${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}\" \"https://api.bitbucket.org/2.0/repositories/${workspace}/${repoToCheck}\"", returnStdout: true).trim()
                         return response.contains("\"name\": \"${repoToCheck}\"")
                     }
 
-                    // Function to sync branches from source to destination
+                    def createGithubRepo = { String username, String repoToCreate ->
+                        sh(script: "curl -s -X POST -u \"${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}\" -d '{\"name\":\"${repoToCreate}\"}' https://api.github.com/user/repos")
+                    }
+
+                    def createBitbucketRepo = { String workspace, String repoToCreate ->
+                        sh(script: "curl -s -X POST -u \"${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}\" -H \"Content-Type: application/json\" -d '{\"scm\": \"git\", \"name\": \"${repoToCreate}\"}' https://api.bitbucket.org/2.0/repositories/${workspace}/${repoToCreate}")
+                    }
+
                     def syncBranches = { String sourceRepoUrl, String destRepoUrl, List branchListToSync ->
                         branchListToSync.each { branch ->
                             echo "Syncing branch '${branch}' for repository '${repoName}' from ${sourcePlatform} to ${destPlatform}..."
-
-                            // Create a temporary directory for operations
                             def tmpDir = sh(script: 'mktemp -d', returnStdout: true).trim()
-
                             try {
-                                // Fetch branch from source repository
                                 sh(script: "git clone --bare \"${sourceRepoUrl}\" \"${tmpDir}/source-repo\"")
                                 dir("${tmpDir}/source-repo") {
                                     sh(script: "git fetch origin ${branch}")
                                 }
-
-                                // Push branch to destination repository
                                 sh(script: "git -C \"${tmpDir}/source-repo\" push \"${destRepoUrl}\" ${branch}")
                             } finally {
-                                // Cleanup
                                 sh(script: "rm -rf \"${tmpDir}\"")
                             }
                         }
-
                         echo "Repository '${repoName}' branches have been synced successfully from ${sourcePlatform} to ${destPlatform}."
                     }
 
-                    // Determine source and destination URLs
                     def sourceRepoUrl, destRepoUrl
 
                     if (sourcePlatform.toLowerCase() == 'bitbucket') {
-                        // Check if the Bitbucket repository exists
                         if (!checkBitbucketRepo(sourceWorkspaceOrUsername, repoName)) {
                             error "Repository '${repoName}' does not exist on Bitbucket."
                         }
                         sourceRepoUrl = "https://${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}@bitbucket.org/${sourceWorkspaceOrUsername}/${repoName}.git"
                     } else if (sourcePlatform.toLowerCase() == 'github') {
-                        // Check if the GitHub repository exists
                         if (!checkGithubRepo(sourceWorkspaceOrUsername, repoName)) {
                             error "Repository '${repoName}' does not exist on GitHub."
                         }
@@ -82,22 +74,19 @@ pipeline {
                     }
 
                     if (destPlatform.toLowerCase() == 'bitbucket') {
-                        // Check if the Bitbucket repository exists
                         if (!checkBitbucketRepo(destWorkspaceOrUsername, repoName)) {
-                            error "Repository '${repoName}' does not exist on Bitbucket."
+                            createBitbucketRepo(destWorkspaceOrUsername, repoName) // Create the repo if it doesn't exist
                         }
                         destRepoUrl = "https://${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}@bitbucket.org/${destWorkspaceOrUsername}/${repoName}.git"
                     } else if (destPlatform.toLowerCase() == 'github') {
-                        // Check if the GitHub repository exists
                         if (!checkGithubRepo(destWorkspaceOrUsername, repoName)) {
-                            error "Repository '${repoName}' does not exist on GitHub."
+                            createGithubRepo(destWorkspaceOrUsername, repoName) // Create the repo if it doesn't exist
                         }
                         destRepoUrl = "https://${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}@github.com/${destWorkspaceOrUsername}/${repoName}.git"
                     } else {
                         error "Unsupported destination platform: ${destPlatform}. Please choose either 'Bitbucket' or 'GitHub'."
                     }
 
-                    // Sync branches from source to destination
                     syncBranches(sourceRepoUrl, destRepoUrl, branchList)
                 }
             }
