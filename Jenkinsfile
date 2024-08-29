@@ -8,17 +8,13 @@ pipeline {
         string(name: 'DEST_WORKSPACE_OR_USERNAME', defaultValue: '', description: 'Destination workspace (for Bitbucket) or username (for GitHub)')
         string(name: 'REPO_NAME', defaultValue: '', description: 'Repository name')
         string(name: 'BRANCHES_INPUT', defaultValue: '', description: 'Branches to sync (comma-separated, e.g., main,develop)')
-        
-        // Secret IDs for GitHub tokens
-        string(name: 'SOURCE_GITHUB_TOKEN_ID', defaultValue: '', description: 'Secret ID for GitHub token for source account')
-        string(name: 'DEST_GITHUB_TOKEN_ID', defaultValue: '', description: 'Secret ID for GitHub token for destination account')
+        string(name: 'SOURCE_GITHUB_TOKEN_ID', defaultValue: '', description: 'Credential ID for the source GitHub token')
+        string(name: 'DEST_GITHUB_TOKEN_ID', defaultValue: '', description: 'Credential ID for the destination GitHub token')
     }
 
     environment {
         BITBUCKET_USERNAME = 'akshaysunil201'
         BITBUCKET_APP_PASSWORD = credentials('bit_bucket_token')
-        SOURCE_GITHUB_TOKEN = credentials(params.SOURCE_GITHUB_TOKEN_ID) // Use secret ID for source GitHub token
-        DEST_GITHUB_TOKEN = credentials(params.DEST_GITHUB_TOKEN_ID) // Use secret ID for destination GitHub token
     }
 
     stages {
@@ -28,14 +24,16 @@ pipeline {
                     // Retrieve parameters
                     def sourcePlatform = params.SOURCE_PLATFORM
                     def sourceWorkspaceOrUsername = params.SOURCE_WORKSPACE_OR_USERNAME
-                    def sourceGithubToken = sourcePlatform.toLowerCase() == 'github' ? env.SOURCE_GITHUB_TOKEN : ''
                     def destPlatform = params.DEST_PLATFORM
                     def destWorkspaceOrUsername = params.DEST_WORKSPACE_OR_USERNAME
-                    def destGithubToken = destPlatform.toLowerCase() == 'github' ? env.DEST_GITHUB_TOKEN : ''
                     def repoName = params.REPO_NAME
                     def branchesInput = params.BRANCHES_INPUT
 
                     def branchList = branchesInput.split(',')
+
+                    // Retrieve GitHub tokens
+                    def sourceGithubToken = credentials(params.SOURCE_GITHUB_TOKEN_ID) // Use secret ID for source GitHub token
+                    def destGithubToken = credentials(params.DEST_GITHUB_TOKEN_ID) // Use secret ID for destination GitHub token
 
                     def checkGithubRepo = { String username, String repoToCheck, String token ->
                         def repoCheck = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" -u \"${username}:${token}\" \"https://api.github.com/repos/${username}/${repoToCheck}\"", returnStdout: true).trim()
