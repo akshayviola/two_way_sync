@@ -22,7 +22,7 @@ pipeline {
                     def branchesInput = input message: 'Enter the branches to sync (comma-separated, e.g., main,develop):', parameters: [string(defaultValue: '', description: 'Branches to sync', name: 'BRANCHES_INPUT')]
 
                     // Convert comma-separated branches into a list
-                    def branches = branchesInput.split(',')
+                    def branchList = branchesInput.split(',')
 
                     // Function to check if a GitHub repository exists
                     def checkGithubRepo = { String username, String repoToCheck ->
@@ -37,8 +37,8 @@ pipeline {
                     }
 
                     // Function to sync branches from source to destination
-                    def syncBranches = { String sourceRepoUrl, String destRepoUrl, List branches ->
-                        branches.each { branch ->
+                    def syncBranches = { String sourceRepoUrl, String destRepoUrl, List branchListToSync ->
+                        branchListToSync.each { branch ->
                             echo "Syncing branch '${branch}' for repository '${repoName}' from ${sourcePlatform} to ${destPlatform}..."
 
                             // Create a temporary directory for operations
@@ -98,7 +98,7 @@ pipeline {
                     }
 
                     // Sync branches from source to destination
-                    syncBranches(sourceRepoUrl, destRepoUrl, branches)
+                    syncBranches(sourceRepoUrl, destRepoUrl, branchList)
                 }
             }
         }
