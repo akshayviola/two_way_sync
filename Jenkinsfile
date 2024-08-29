@@ -1,6 +1,15 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'SOURCE_PLATFORM', defaultValue: '', description: 'Source platform (Bitbucket or GitHub)')
+        string(name: 'SOURCE_WORKSPACE_OR_USERNAME', defaultValue: '', description: 'Source workspace (for Bitbucket) or username (for GitHub)')
+        string(name: 'DEST_PLATFORM', defaultValue: '', description: 'Destination platform (Bitbucket or GitHub)')
+        string(name: 'DEST_WORKSPACE_OR_USERNAME', defaultValue: '', description: 'Destination workspace (for Bitbucket) or username (for GitHub)')
+        string(name: 'REPO_NAME', defaultValue: '', description: 'Repository name')
+        string(name: 'BRANCHES_INPUT', defaultValue: '', description: 'Branches to sync (comma-separated, e.g., main,develop)')
+    }
+
     environment {
         BITBUCKET_USERNAME = 'akshaysunil201'
         BITBUCKET_APP_PASSWORD = credentials('bit_bucket_token')
@@ -12,13 +21,13 @@ pipeline {
         stage('Sync Repositories') {
             steps {
                 script {
-                    // Prompt for source and destination repository details
-                    def sourcePlatform = input message: 'Enter the source platform (Bitbucket or GitHub):', parameters: [string(defaultValue: '', description: 'Source platform', name: 'SOURCE_PLATFORM')]
-                    def sourceWorkspaceOrUsername = input message: 'Enter the source workspace (for Bitbucket) or username (for GitHub):', parameters: [string(defaultValue: '', description: 'Source workspace/username', name: 'SOURCE_WORKSPACE_OR_USERNAME')]
-                    def destPlatform = input message: 'Enter the destination platform (Bitbucket or GitHub):', parameters: [string(defaultValue: '', description: 'Destination platform', name: 'DEST_PLATFORM')]
-                    def destWorkspaceOrUsername = input message: 'Enter the destination workspace (for Bitbucket) or username (for GitHub):', parameters: [string(defaultValue: '', description: 'Destination workspace/username', name: 'DEST_WORKSPACE_OR_USERNAME')]
-                    def repoName = input message: 'Enter the repository name:', parameters: [string(defaultValue: '', description: 'Repository name', name: 'REPO_NAME')]
-                    def branchesInput = input message: 'Enter the branches to sync (comma-separated, e.g., main,develop):', parameters: [string(defaultValue: '', description: 'Branches to sync', name: 'BRANCHES_INPUT')]
+                    // Retrieve parameters
+                    def sourcePlatform = params.SOURCE_PLATFORM
+                    def sourceWorkspaceOrUsername = params.SOURCE_WORKSPACE_OR_USERNAME
+                    def destPlatform = params.DEST_PLATFORM
+                    def destWorkspaceOrUsername = params.DEST_WORKSPACE_OR_USERNAME
+                    def repoName = params.REPO_NAME
+                    def branchesInput = params.BRANCHES_INPUT
 
                     def branchList = branchesInput.split(',')
 
