@@ -8,13 +8,17 @@ pipeline {
         string(name: 'DEST_WORKSPACE_OR_USERNAME', defaultValue: '', description: 'Destination workspace (for Bitbucket) or username (for GitHub)')
         string(name: 'REPO_NAME', defaultValue: '', description: 'Repository name')
         string(name: 'BRANCHES_INPUT', defaultValue: '', description: 'Branches to sync (comma-separated, e.g., main,develop)')
+        
+        // Secret IDs for GitHub tokens
+        string(name: 'SOURCE_GITHUB_TOKEN_ID', defaultValue: '', description: 'Secret ID for GitHub token for source account')
+        string(name: 'DEST_GITHUB_TOKEN_ID', defaultValue: '', description: 'Secret ID for GitHub token for destination account')
     }
 
     environment {
         BITBUCKET_USERNAME = 'akshaysunil201'
         BITBUCKET_APP_PASSWORD = credentials('bit_bucket_token')
-        GITHUB_USERNAME = 'akshayviola'
-        GITHUB_TOKEN = credentials('github_token')
+        SOURCE_GITHUB_TOKEN = credentials(params.SOURCE_GITHUB_TOKEN_ID) // Use secret ID for source GitHub token
+        DEST_GITHUB_TOKEN = credentials(params.DEST_GITHUB_TOKEN_ID) // Use secret ID for destination GitHub token
     }
 
     stages {
@@ -24,15 +28,17 @@ pipeline {
                     // Retrieve parameters
                     def sourcePlatform = params.SOURCE_PLATFORM
                     def sourceWorkspaceOrUsername = params.SOURCE_WORKSPACE_OR_USERNAME
+                    def sourceGithubToken = sourcePlatform.toLowerCase() == 'github' ? env.SOURCE_GITHUB_TOKEN : ''
                     def destPlatform = params.DEST_PLATFORM
                     def destWorkspaceOrUsername = params.DEST_WORKSPACE_OR_USERNAME
+                    def destGithubToken = destPlatform.toLowerCase() == 'github' ? env.DEST_GITHUB_TOKEN : ''
                     def repoName = params.REPO_NAME
                     def branchesInput = params.BRANCHES_INPUT
 
                     def branchList = branchesInput.split(',')
 
-                    def checkGithubRepo = { String username, String repoToCheck ->
-                        def repoCheck = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" -u \"${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}\" \"https://api.github.com/repos/${username}/${repoToCheck}\"", returnStdout: true).trim()
+                    def checkGithubRepo = { String username, String repoToCheck, String token ->
+                        def repoCheck = sh(script: "curl -s -o /dev/null -w \"%{http_code}\" -u \"${username}:${token}\" \"https://api.github.com/repos/${username}/${repoToCheck}\"", returnStdout: true).trim()
                         return repoCheck == '200'
                     }
 
@@ -41,8 +47,8 @@ pipeline {
                         return response.contains("\"name\": \"${repoToCheck}\"")
                     }
 
-                    def createGithubRepo = { String username, String repoToCreate ->
-                        sh(script: "curl -s -X POST -u \"${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}\" -d '{\"name\":\"${repoToCreate}\"}' https://api.github.com/user/repos")
+                    def createGithubRepo = { String username, String repoToCreate, String token ->
+                        sh(script: "curl -s -X POST -u \"${username}:${token}\" -d '{\"name\":\"${repoToCreate}\"}' https://api.github.com/user/repos")
                     }
 
                     def createBitbucketRepo = { String workspace, String repoToCreate ->
@@ -74,10 +80,10 @@ pipeline {
                         }
                         sourceRepoUrl = "https://${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}@bitbucket.org/${sourceWorkspaceOrUsername}/${repoName}.git"
                     } else if (sourcePlatform.toLowerCase() == 'github') {
-                        if (!checkGithubRepo(sourceWorkspaceOrUsername, repoName)) {
+                        if (!checkGithubRepo(sourceWorkspaceOrUsername, repoName, sourceGithubToken)) {
                             error "Repository '${repoName}' does not exist on GitHub."
                         }
-                        sourceRepoUrl = "https://${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}@github.com/${sourceWorkspaceOrUsername}/${repoName}.git"
+                        sourceRepoUrl = "https://${sourceWorkspaceOrUsername}:${sourceGithubToken}@github.com/${sourceWorkspaceOrUsername}/${repoName}.git"
                     } else {
                         error "Unsupported source platform: ${sourcePlatform}. Please choose either 'Bitbucket' or 'GitHub'."
                     }
@@ -88,10 +94,10 @@ pipeline {
                         }
                         destRepoUrl = "https://${env.BITBUCKET_USERNAME}:${env.BITBUCKET_APP_PASSWORD}@bitbucket.org/${destWorkspaceOrUsername}/${repoName}.git"
                     } else if (destPlatform.toLowerCase() == 'github') {
-                        if (!checkGithubRepo(destWorkspaceOrUsername, repoName)) {
-                            createGithubRepo(destWorkspaceOrUsername, repoName) // Create the repo if it doesn't exist
+                        if (!checkGithubRepo(destWorkspaceOrUsername, repoName, destGithubToken)) {
+                            createGithubRepo(destWorkspaceOrUsername, repoName, destGithubToken) // Create the repo if it doesn't exist
                         }
-                        destRepoUrl = "https://${env.GITHUB_USERNAME}:${env.GITHUB_TOKEN}@github.com/${destWorkspaceOrUsername}/${repoName}.git"
+                        destRepoUrl = "https://${destWorkspaceOrUsername}:${destGithubToken}@github.com/${destWorkspaceOrUsername}/${repoName}.git"
                     } else {
                         error "Unsupported destination platform: ${destPlatform}. Please choose either 'Bitbucket' or 'GitHub'."
                     }
